@@ -1,6 +1,6 @@
 /* Esquecedário: guarda o app no aparelho para abrir sem internet.
    As notas não passam por aqui: ficam no armazenamento do navegador, só neste aparelho. */
-const CACHE = 'esquecedario-5bfd2147e5';
+const CACHE = 'esquecedario-275eac5d3e';
 const ARQUIVOS = ["./", "index.html", "manifest.webmanifest", "icones/apple-touch-icon.png", "icones/icone-192.png", "icones/icone-512.png", "icones/icone.svg"];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));

@@ -333,6 +333,10 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .opcao { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .opcao input { margin-top: .3em; accent-color: var(--ink); }
 .grupo { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.grupo.sair { justify-items: start; }
+.grupo.sair .btn.perigo:not(.forte) { font-size: var(--step--1); color: var(--muted); padding-inline: 0; }
+.grupo.sair .btn.perigo:not(.forte):hover { color: var(--danger); }
+.grupo.sair .confirma { justify-self: stretch; }
 .linha-botoes { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .arquivo-input { font-size: var(--step--1); max-width: 100%; }
 .cola { width: 100%; min-height: 4.5em; font-family: var(--mono); font-size: .75rem; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: 8px; resize: vertical; }
@@ -526,6 +530,25 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .tenta input:focus { outline: none; }
 .tenta.erro input { border-bottom-color: var(--danger); animation: treme .32s; }
 .tenta .link { font-family: var(--mono); font-size: .6875rem; white-space: nowrap; }
+.tenta { position: relative; }
+/* "confirmar": surge acima da lacuna assim que a pessoa começa a escrever (no celular, o Enter do teclado nem sempre é óbvio) */
+.tenta .confirmar {
+  position: absolute; left: 0; bottom: calc(100% + 6px); z-index: 3;
+  font-family: var(--mono); font-size: .6875rem; letter-spacing: .04em; line-height: 1; white-space: nowrap;
+  padding: 7px 10px; border-radius: 4px; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--sheet); cursor: pointer;
+  box-shadow: 0 2px 6px rgb(0 0 0 / .12);
+  animation: confirmarSurge .18s ease-out;
+}
+.tenta .confirmar::after {
+  content: ""; position: absolute; left: 12px; top: 100%;
+  border: 5px solid transparent; border-top-color: var(--accent);
+}
+.tenta .confirmar:active { transform: translateY(1px); }
+.tenta .confirmar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+@keyframes confirmarSurge { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .tenta .confirmar { animation: none; } }
+@media (pointer: coarse) { .tenta .confirmar { padding: 10px 14px; font-size: .75rem; } }
 @keyframes treme { 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
 .volta { animation: tinta 1.4s ease-out; }
 @keyframes tinta {
@@ -687,6 +710,8 @@ body.acolhendo { overflow: hidden; }
 .ac-campo::placeholder { color: var(--ghost); }
 .ac-pe { display: grid; gap: 6px; }
 .ac-primario { width: 100%; padding: 14px 20px; font-size: 1.0625rem; border-radius: 6px; }
+.ac-primario[aria-disabled="true"] { opacity: .45; }
+.ac-primario[aria-disabled="true"]:hover { opacity: .45; }
 .ac-pe .link { justify-self: center; font-size: .9375rem; padding: 10px; }
 @media (max-width: 520px) {
   .ac-dois { grid-template-columns: 1fr; }
@@ -766,7 +791,7 @@ body.acolhendo { overflow: hidden; }
 
       <div class="ac-passo" data-passo="2" hidden>
         <h2 class="ac-titulo" tabindex="-1">Experimente</h2>
-        <p class="ac-lead">Uma palavra desta frase já se apagou. Escreva qual era e aperte Enter.</p>
+        <p class="ac-lead">Uma palavra desta frase já se apagou. Escreva qual era para continuar.</p>
         <p class="ac-teste" id="acTeste"><span class="f5">A tinta perde o </span><span class="f3">preto</span><span class="f5"> e vira </span><span id="acAlvo"><input type="text" id="acPalavra" placeholder="f_rr_g_m" aria-label="Palavra apagada, 8 letras" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"></span><span class="f5">.</span></p>
         <p class="ac-msg" id="acMsg" role="status"></p>
       </div>
@@ -1024,6 +1049,17 @@ body.acolhendo { overflow: hidden; }
         <textarea id="importTexto" class="cola" spellcheck="false"></textarea>
         <div class="linha-botoes"><button class="btn sec" type="button" id="importColar">Importar o que colei</button></div>
         <div class="msg" id="dadosMsg" role="status"></div>
+      </div>
+      <div class="grupo sair">
+        <button class="btn perigo" type="button" id="btnSair" aria-expanded="false" aria-controls="confSair">Sair</button>
+        <div class="confirma perigo" id="confSair" hidden>
+          <p><b>Sair apaga tudo deste aparelho, para sempre.</b> Todas as lembranças, as esquecidas, as estatísticas, o seu nome e os ajustes serão perdidos permanentemente, e o Esquecedário volta à apresentação inicial. Não há como desfazer.</p>
+          <p>Se quiser guardar as notas, use <i>Baixar arquivo</i> acima antes de sair.</p>
+          <div class="linha-botoes">
+            <button class="btn perigo forte" type="button" id="simSair">Apagar tudo e sair</button>
+            <button class="btn sec" type="button" id="naoSair">Cancelar</button>
+          </div>
+        </div>
       </div>
       </div>
     </div>
@@ -1313,7 +1349,9 @@ function load() {
   } catch (e) { storageOk = false; }
   return emptyDb();
 }
+let zerado = false;
 function save() {
+  if (zerado) return;
   try { localStorage.setItem(KEY, JSON.stringify(db)); }
   catch (e) { storageOk = false; $('#avisoStorage').hidden = false; }
 }
@@ -1595,7 +1633,13 @@ function guessWidget(note, tok, onResult) {
   const rev = el('button', 'link revelar', 'revelar'); rev.type = 'button';
   const podeRevelar = () => PLANO.revelar && !!((attempts.get(key) || 0) || (hints.get(key) || 0));
   rev.hidden = !podeRevelar();
-  wrap.append(inp, dica, rev);
+  const conf = el('button', 'confirmar', 'confirmar'); conf.type = 'button'; conf.hidden = true;
+  conf.setAttribute('aria-label', 'Confirmar a palavra');
+  wrap.append(inp, conf, dica, rev);
+  inp.addEventListener('input', () => { conf.hidden = !inp.value.trim(); });
+  // tocar no botão não tira o foco do campo (o teclado do celular continua aberto)
+  conf.addEventListener('pointerdown', e => e.preventDefault());
+  conf.addEventListener('mousedown', e => e.preventDefault());
 
   const pattern = () => {
     const st = wordState(note, tok, Date.now());
@@ -1610,19 +1654,23 @@ function guessWidget(note, tok, onResult) {
   const mult = () => Math.max(0.25, 1 - 0.3 * (hints.get(key) || 0));
   inp.placeholder = pattern();
 
+  const confirmar = () => {
+    const g = norm(inp.value); if (!g) return;
+    const alvo = norm(tok.s);
+    if (g === alvo) onResult('memoria', { mult: mult() });
+    else if (tok.chars.length >= 6 && quase(g, alvo)) onResult('quase', { mult: mult() * 0.8 });
+    else {
+      const a = (attempts.get(key) || 0) + 1; attempts.set(key, a);
+      wrap.classList.remove('erro'); void wrap.offsetWidth; wrap.classList.add('erro');
+      rev.hidden = !podeRevelar(); inp.focus(); inp.select();
+      onResult('erro', { tentativas: a });
+    }
+  };
+  conf.addEventListener('click', confirmar);
   inp.addEventListener('keydown', e => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      const g = norm(inp.value); if (!g) return;
-      const alvo = norm(tok.s);
-      if (g === alvo) onResult('memoria', { mult: mult() });
-      else if (tok.chars.length >= 6 && quase(g, alvo)) onResult('quase', { mult: mult() * 0.8 });
-      else {
-        const a = (attempts.get(key) || 0) + 1; attempts.set(key, a);
-        wrap.classList.remove('erro'); void wrap.offsetWidth; wrap.classList.add('erro');
-        rev.hidden = !podeRevelar(); inp.select();
-        onResult('erro', { tentativas: a });
-      }
+      confirmar();
     } else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onResult('cancel'); }
   });
   dica.addEventListener('click', () => {
@@ -2994,6 +3042,14 @@ function bind() {
   });
   $('#optNome').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#salvarNome').click(); } });
   $('#reverApresentacao').addEventListener('click', () => { fecharGaveta(false); mostrarAcolhida({ revisita: true }); });
+  // Sair: apaga tudo deste aparelho e volta à apresentação inicial
+  const confSair = (abrir) => {
+    $('#confSair').hidden = !abrir; $('#btnSair').setAttribute('aria-expanded', String(abrir));
+    if (abrir) $('#naoSair').focus(); else $('#btnSair').focus();
+  };
+  $('#btnSair').addEventListener('click', () => confSair($('#confSair').hidden));
+  $('#naoSair').addEventListener('click', () => confSair(false));
+  $('#simSair').addEventListener('click', sair);
 
   $('#texto').addEventListener('click', e => { const b = e.target.closest('.lacuna'); if (b && !adeus) startGuess(b); });
 
@@ -3071,13 +3127,38 @@ function saudacao(now = Date.now()) {
 }
 
 function mostrarAcolhida({ revisita = false } = {}) {
-  ac = { passo: 0, revisita, demo: null, ok: false, erros: 0, toque: null };
+  ac = { passo: 0, revisita, demo: null, ok: false, mostrou: false, erros: 0, toque: null };
   $('#app').inert = true; $('#app').setAttribute('aria-hidden', 'true');
   document.body.classList.add('acolhendo');
   const a = $('#acolhida'); a.classList.remove('saindo'); a.hidden = false; a.scrollTop = 0;
   $('#acNome').value = (db.perfil && db.perfil.nome) || '';
   $('#acErroNome').textContent = '';
   irPasso(0, 0);
+}
+
+// o passo "Experimente" (2) só fica para trás quando a palavra for escrita certa
+const PASSO_TESTE = 2;
+function barrado(n) { return !ac.ok && ac.passo <= PASSO_TESTE && n > PASSO_TESTE; }
+function avancar(n) {
+  if (barrado(n)) {
+    if (ac.passo < PASSO_TESTE) { irPasso(PASSO_TESTE, 1); return; }
+    exigirPalavra(); return;
+  }
+  irPasso(n, 1);
+}
+function exigirPalavra() {
+  const inp = $('#acPalavra');
+  if (inp && norm(inp.value)) { testarPalavra(); return; }
+  const msg = $('#acMsg');
+  const t = $('#acTeste'); t.classList.remove('erro'); void t.offsetWidth; t.classList.add('erro');
+  msg.className = 'ac-msg mau';
+  msg.textContent = 'Escreva a palavra que falta para continuar.';
+  if (inp) inp.focus();
+}
+function estadoProximo() {
+  const preso = ac.passo === PASSO_TESTE && !ac.ok;
+  $('#acProximo').setAttribute('aria-disabled', String(preso));
+  $('#acPular').style.visibility = ac.passo >= PASSOS - 1 || preso ? 'hidden' : 'visible';
 }
 
 function irPasso(n, dir = 1) {
@@ -3090,7 +3171,7 @@ function irPasso(n, dir = 1) {
   });
   $$('#acPontos i').forEach((d, k) => { d.classList.toggle('atual', k === ac.passo); d.classList.toggle('feito', k < ac.passo); });
   $('#acVoltar').style.visibility = ac.passo === 0 ? 'hidden' : 'visible';
-  $('#acPular').style.visibility = ac.passo >= PASSOS - 1 ? 'hidden' : 'visible';
+  estadoProximo();
   $('#acProximo').textContent = ac.passo === PASSOS - 1 && ac.revisita ? 'Voltar ao diário' : ROTULOS[ac.passo];
   $('#acSemNome').hidden = ac.passo !== PASSOS - 1;
   $('#acolhida').scrollTop = 0;
@@ -3135,8 +3216,10 @@ function testarPalavra() {
   if (v === 'ferrugem' || quase(v, 'ferrugem')) {
     ac.ok = true;
     $('#acAlvo').replaceChildren(el('span', 'f5 volta', 'ferrugem'));
-    msg.textContent = v === 'ferrugem' ? 'Isso. É assim que uma palavra continua viva aqui.' : 'Quase: era “ferrugem”. Erros pequenos em palavras longas contam.';
+    msg.textContent = ac.mostrou ? 'Isso. No diário, revelar também funciona, mas a palavra volta a sumir mais cedo.'
+      : v === 'ferrugem' ? 'Isso. É assim que uma palavra continua viva aqui.' : 'Quase: era “ferrugem”. Erros pequenos em palavras longas contam.';
     msg.className = 'ac-msg ok';
+    estadoProximo();
     setTimeout(() => $('#acProximo').focus(), 50);
     return;
   }
@@ -3147,10 +3230,9 @@ function testarPalavra() {
   if (ac.erros >= 2) {
     const b = el('button', 'link', 'Mostrar'); b.type = 'button';
     b.addEventListener('click', () => {
-      ac.ok = true;
-      $('#acAlvo').replaceChildren(el('span', 'f5 volta', 'ferrugem'));
-      msg.className = 'ac-msg'; msg.textContent = 'Era “ferrugem”. No diário, revelar também funciona, mas a palavra volta a sumir mais cedo.';
-      $('#acProximo').focus();
+      ac.mostrou = true;
+      msg.className = 'ac-msg'; msg.textContent = 'Era “ferrugem”. Escreva-a no campo para continuar.';
+      const inp2 = $('#acPalavra'); inp2.value = ''; inp2.focus();
     });
     msg.append(b);
   }
@@ -3158,7 +3240,7 @@ function testarPalavra() {
 }
 
 function proximoPasso() {
-  if (ac.passo < PASSOS - 1) irPasso(ac.passo + 1, 1);
+  if (ac.passo < PASSOS - 1) avancar(ac.passo + 1);
   else concluirAcolhida($('#acNome').value.trim(), false);
 }
 
@@ -3187,7 +3269,7 @@ function concluirAcolhida(nome, semNome) {
 function bindAcolhida() {
   $('#acProximo').addEventListener('click', proximoPasso);
   $('#acVoltar').addEventListener('click', () => irPasso(ac.passo - 1, -1));
-  $('#acPular').addEventListener('click', () => irPasso(PASSOS - 1, 1));
+  $('#acPular').addEventListener('click', () => avancar(PASSOS - 1));
   $('#acSemNome').addEventListener('click', () => concluirAcolhida('', true));
   $('#acForm').addEventListener('submit', e => { e.preventDefault(); proximoPasso(); });
   $('#acNome').addEventListener('input', () => { $('#acErroNome').textContent = ''; });
@@ -3195,7 +3277,7 @@ function bindAcolhida() {
   const a = $('#acolhida');
   a.addEventListener('keydown', e => {
     if (!ac || ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-    if (e.key === 'ArrowRight' && ac.passo < PASSOS - 1) irPasso(ac.passo + 1, 1);
+    if (e.key === 'ArrowRight' && ac.passo < PASSOS - 1) avancar(ac.passo + 1);
     if (e.key === 'ArrowLeft' && ac.passo > 0) irPasso(ac.passo - 1, -1);
   });
   // deslizar o dedo para os lados troca de passo, como num app
@@ -3204,12 +3286,24 @@ function bindAcolhida() {
     if (!ac || !ac.toque) return;
     const dx = e.clientX - ac.toque.x, dy = e.clientY - ac.toque.y; ac.toque = null;
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    if (dx < 0 && ac.passo < PASSOS - 1) irPasso(ac.passo + 1, 1);
+    if (dx < 0 && ac.passo < PASSOS - 1) avancar(ac.passo + 1);
     else if (dx > 0 && ac.passo > 0) irPasso(ac.passo - 1, -1);
   });
 }
 
 /* ================= início ================= */
+/* ================= sair: zera o app ================= */
+function sair() {
+  try {
+    const chaves = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && (k === KEY || k.startsWith(KEY + '.'))) chaves.push(k); }
+    chaves.forEach(k => localStorage.removeItem(k));
+  } catch (_) {}
+  db = emptyDb();
+  zerado = true;   // nada mais é gravado até a página recomeçar
+  location.reload();
+}
+
 let booted = false;
 function bootApp() {
   if (booted) return; booted = true;
